@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CXC Seguras - Sistema Inteligente de Cobranza</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        brand: { 50: '#eef8ff', 100: '#d9f0ff', 500: '#0284c7', 600: '#0369a1', 700: '#03588c' }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="h-full bg-slate-900 text-slate-100 flex flex-col font-sans antialiased selection:bg-cyan-500 selection:text-white">
+
+    <!-- App Wrapper -->
+    <div id="app" class="min-h-full flex flex-col">
+        <!-- Dynamic content rendered via JavaScript -->
+    </div>
+
+    <!-- Notification Toast Modal -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2"></div>
+
+    <script>
+        // --- State Management & Local Storage ---
+        const STORAGE_KEY = 'cxc_seguras_projects_v1';
+        const ACCEPTED_KEY = 'cxc_seguras_privacy_accepted';
+
+        let state = {
+            step: localStorage.getItem(ACCEPTED_KEY) === 'true' ? 'login' : 'privacy',
+            role: null, // 'leader' (0444), 'operator' (0004), 'viewer' (1111)
+            userCode: '',
+            projects: JSON.parse(localStorage.getItem(STORAGE_KEY)) || [
+                {
+                    id: 'proj-1',
+                    company: 'Constructora Los Pinos S.A.',
+                    totalAmount: 45000,
+                    advanceAmount: 15000,
+                    installments: [
+                        { date: '2026-10-15', amount: 10000, paid: false },
+                        { date: '2026-11-05', amount: 10000, paid: false },
+                        { date: '2026-12-01', amount: 10000, paid: false }
+                    ],
+                    createdAt: '2026-10-01'
+                },
+                {
+                    id: 'proj-2',
+                    company: 'Comercializadora del Norte',
+                    totalAmount: 12000,
+                    advanceAmount: 2000,
+                    installments: [
+                        { date: '2026-11-08', amount: 5000, paid: false },
+                        { date: '2026-12-10', amount: 5000, paid: false }
+                    ],
+                    createdAt: '2026-11-01'
+                }
+            ],
+            // Form state for leader
+            form: {
+                company: '',
+                totalAmount: '',
+                advanceAmount: '',
+                numDates: '1',
+                dates: ['']
+            },
+            searchQuery: '',
+            filterStatus: 'all'
+        };
+
+        function saveState() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state.projects));
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const bgClass = type === 'success' ? 'bg-emerald-600' : (type === 'error' ? 'bg-rose-600' : 'bg-sky-600');
+            toast.className = `${bgClass} text-white px-4 py-3 rounded-xl shadow-xl flex items-center gap-3 transform translate-y-2 opacity-0 transition-all duration-300 font-medium text-sm`;
+            toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-circle-check' : 'fa-circle-info'} text-lg"></i><span>${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.remove('translate-y-2', 'opacity-0'), 10);
+            setTimeout(() => {
+                toast.classList.add('translate-y-2', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        // --- Render Engine ---
+        function render() {
+            const app = document.getElementById('app');
+            app.innerHTML = '';
+
+            if (state.step === 'privacy') {
+                app.innerHTML = renderPrivacyScreen();
+            } else if (state.step === 'login') {
+                app.innerHTML = renderLoginScreen();
+            } else if (state.step === 'dashboard') {
+                app.innerHTML = renderDashboard();
+            }
+        }
+
+        // --- Screen 1: Privacy Notice & Terms ---
+        function renderPrivacyScreen() {
+            return `
+                <div class="flex-1 flex items-center justify-center p-4 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-900">
+                    <div class="max-w-2xl w-full bg-slate-900/90 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden backdrop-blur-xl">
+                        <div class="p-6 sm:p-8 border-b border-slate-800 flex items-center gap-4">
+                            <div class="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 text-xl font-bold">
+                                <i class="fa-solid fa-shield-halved"></i>
+                            </div>
+                            <div>
+                                <h1 class="text-2xl font-bold text-white tracking-tight">CXC Seguras</h1>
+                                <p class="text-xs text-slate-400 uppercase tracking-widest font-semibold mt-0.5">Aviso de Privacidad y Términos</p>
+                            </div>
+                        </div>
+                        <div class="p-6 sm:p-8 space-y-4 max-h-[50vh] overflow-y-auto text-sm text-slate-300 custom-scrollbar">
+                            <div class="p-4 rounded-xl bg-slate-800/50 border border-slate-700/50 space-y-2">
+                                <h2 class="font-semibold text-white flex items-center gap-2"><i class="fa-solid fa-building text-cyan-400"></i> Responsable y Domicilio</h2>
+                                <p><strong>Cobranzas Seguras MX, S.A.</strong> con domicilio en Av. Cerro de la Campana 102, Col. Los Pirules, Estado de México, es responsable del tratamiento de sus datos personales.</p>
+                            </div>
+                            <div class="p-4 rounded-xl bg-slate-800/50 border border-slate-700/50 space-y-2">
+                                <h2 class="font-semibold text-white flex items-center gap-2"><i class="fa-solid fa-database text-cyan-400"></i> Datos Tratados y Finalidades</h2>
+                                <p>Recopilamos identificación y contacto de áreas responsables, facturas totales, montos de proyectos y nombres de clientes. Finalidad: Facilitar la cobranza de forma efectiva, segura y protegiendo sus datos sensibles.</p>
+                            </div>
+                            <div class="p-4 rounded-xl bg-slate-800/50 border border-slate-700/50 space-y-2">
+                                <h2 class="font-semibold text-white flex items-center gap-2"><i class="fa-solid fa-scale-balanced text-cyan-400"></i> Derechos ARCO y Limitación</h2>
+                                <p>Puede limitar el uso de sus datos o ejercer sus derechos ARCO contactando a <span class="text-cyan-400 font-mono">privacidad@cobranzasseguras.mx</span> sin costo. Respuesta en un máximo de 20 días hábiles.</p>
+                            </div>
+                        </div>
+                        <div class="p-6 sm:p-8 bg-slate-950/50 border-t border-slate-800 space-y-4">
+                            <label class="flex items-start gap-3 cursor-pointer group">
+                                <input type="checkbox" id="privacy-check" onchange="togglePrivacyAccept(this)" class="mt-1 w-4 h-4 rounded border-slate-700 bg-slate-800 text-cyan-500 focus:ring-cyan-500/20 focus:ring-offset-slate-900 cursor-pointer">
+                                <span class="text-sm text-slate-300 group-hover:text-white transition-colors">
+                                    He leído y acepto el <strong>Aviso de Privacidad</strong> y los términos y condiciones para el uso seguro del sistema de cobranza.
+                                </span>
+                            </label>
+                            <button id="privacy-btn" disabled onclick="acceptPrivacy()" class="w-full py-3.5 px-4 rounded-xl font-semibold text-white bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-cyan-600/20 flex items-center justify-center gap-2">
+                                <span>Continuar al Sistema</span>
+                                <i class="fa-solid fa-arrow-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        let isPrivacyAccepted = false;
+        function togglePrivacyAccept(el) {
+            isPrivacyAccepted = el.checked;
+            document.getElementById('privacy-btn').disabled = !isPrivacyAccepted;
+        }
+
+        function acceptPrivacy() {
+            if (!isPrivacyAccepted) return;
+            localStorage.setItem(ACCEPTED_KEY, 'true');
+            state.step = 'login';
+            render();
+        }
+
+        // --- Screen 2: Login by Access Code ---
+        function renderLoginScreen() {
+            return `
+                <div class="flex-1 flex items-center justify-center p-4 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-900">
+                    <div class="max-w-md w-full bg-slate-900/90 border border-slate-800 rounded-2xl shadow-2xl p-8 backdrop-blur-xl">
+                        <div class="text-center mb-8">
+                            <div class="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 text-2xl font-bold mx-auto mb-4 shadow-inner">
+                                <i class="fa-solid fa-lock"></i>
+                            </div>
+                            <h1 class="text-2xl font-bold text-white tracking-tight">CXC Seguras</h1>
+                            <p class="text-sm text-slate-400 mt-1">Ingrese su código de acceso autorizado</p>
+                        </div>
+
+                        <form onsubmit="handleLogin(event)" class="space-y-6">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Código de 4 Dígitos</label>
+                                <input type="password" maxlength="4" id="access-code-input" placeholder="••••" required
+                                    class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3.5 text-center text-2xl tracking-widest font-mono text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 transition-all">
+                            </div>
+
+                            <button type="submit" class="w-full py-3.5 px-4 rounded-xl font-semibold text-white bg-cyan-600 hover:bg-cyan-500 transition-all duration-200 shadow-lg shadow-cyan-600/20 flex items-center justify-center gap-2">
+                                <span>Acceder al Sistema</span>
+                                <i class="fa-solid fa-key"></i>
+                            </button>
+                        </form>
+
+                        <div class="mt-8 pt-6 border-t border-slate-800/80 text-xs text-slate-500 space-y-2">
+                            <p class="font-semibold text-slate-400">Códigos de Acceso Disponibles:</p>
+                            <div class="grid grid-cols-3 gap-2 pt-1 font-mono">
+                                <div class="bg-slate-950 p-2 rounded border border-slate-800 text-center">
+                                    <span class="text-cyan-400 font-bold">0444</span>
+                                    <p class="text-[10px] text-slate-400 font-sans mt-0.5">Líder / Jefe</p>
+                                </div>
+                                <div class="bg-slate-950 p-2 rounded border border-slate-800 text-center">
+                                    <span class="text-emerald-400 font-bold">0004</span>
+                                    <p class="text-[10px] text-slate-400 font-sans mt-0.5">Operativo/DB</p>
+                                </div>
+                                <div class="bg-slate-950 p-2 rounded border border-slate-800 text-center">
+                                    <span class="text-indigo-400 font-bold">1111</span>
+                                    <p class="text-[10px] text-slate-400 font-sans mt-0.5">Vista General</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function handleLogin(e) {
+            e.preventDefault();
+            const code = document.getElementById('access-code-input').value.trim();
+            if (code === '0444') {
+                state.role = 'leader';
+                state.userCode = '0444';
+                state.step = 'dashboard';
+                showToast('Acceso concedido: Rol Líder / Jefe', 'success');
+                render();
+            } else if (code === '0004') {
+                state.role = 'operator';
+                state.userCode = '0004';
+                state.step = 'dashboard';
+                showToast('Acceso concedido: Rol Operativo / Descarga', 'success');
+                render();
+            } else if (code === '1111') {
+                state.role = 'viewer';
+                state.userCode = '1111';
+                state.step = 'dashboard';
+                showToast('Acceso concedido: Vista General y Reportes', 'success');
+                render();
+            } else {
+                showToast('Código incorrecto. Intente 0444, 0004 o 1111', 'error');
+            }
+        }
+
+        function logout() {
+            state.role = null;
+            state.userCode = '';
+            state.step = 'login';
+            showToast('Sesión cerrada correctamente', 'info');
+            render();
+        }
+
+        // --- Screen 3: Dashboard & Main App ---
+        function renderDashboard() {
+            const today = new Date().toISOString().split('T')[0]; // Current date simulation 2026-11-06
+
+            // Compute statistics
+            let totalProjects = state.projects.length;
+            let totalPortfolio = state.projects.reduce((acc, p) => acc + p.totalAmount, 0);
+            let totalAdvance = state.projects.reduce((acc, p) => acc + p.advanceAmount, 0);
+            
+            let readyToCollectCount = 0;
+            let pendingCount = 0;
+
+            state.projects.forEach(p => {
+                p.installments.forEach(inst => {
+                    if (inst.date <= today) {
+                        readyToCollectCount++;
+                    } else {
+                        pendingCount++;
+                    }
+                });
+            });
+
+            return `
+                <div class="min-h-full flex flex-col bg-slate-900">
+                    <!-- Top Navigation Bar -->
+                    <header class="bg-slate-950/80 border-b border-slate-800 sticky top-0 z-40 backdrop-blur-md">
+                        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 font-bold">
+                                    <i class="fa-solid fa-shield-halved"></i>
+                                </div>
+                                <div>
+                                    <span class="font-bold text-white text-lg tracking-tight">CXC Seguras</span>
+                                    <span class="hidden sm:inline-block ml-2 px-2 py-0.5 text-[10px] font-semibold bg-slate-800 text-cyan-400 rounded-full border border-slate-700">
+                                        ${state.role === 'leader' ? 'Rol: Líder (0444)' : (state.role === 'operator' ? 'Rol: Operativo (0004)' : 'Rol: Ejecutivo (1111)')}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <div class="text-right hidden sm:block">
+                                    <p class="text-xs text-slate-400">Fecha del Sistema</p>
+                                    <p class="text-xs font-mono font-bold text-cyan-400"><i class="fa-regular fa-calendar mr-1"></i> ${today}</p>
+                                </div>
+                                <button onclick="logout()" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-all flex items-center gap-2 border border-slate-700">
+                                    <i class="fa-solid fa-right-from-bracket"></i>
+                                    <span>Salir</span>
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+
+                    <!-- Main Content Body -->
+                    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+                        
+                        <!-- Statistics Cards -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div class="bg-slate-950/60 border border-slate-800 p-5 rounded-2xl shadow-lg relative overflow-hidden">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Proyectos Registrados</p>
+                                        <h3 class="text-2xl font-bold text-white mt-1">${totalProjects}</h3>
+                                    </div>
+                                    <div class="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 text-lg">
+                                        <i class="fa-solid fa-folder-open"></i>
+                                    </div>
+                                </div>
+                                <div class="mt-3 text-xs text-slate-400 flex items-center gap-1">
+                                    <span class="text-emerald-400 font-semibold"><i class="fa-solid fa-arrow-up"></i> Activos</span> en cartera
+                                </div>
+                            </div>
+
+                            <div class="bg-slate-950/60 border border-slate-800 p-5 rounded-2xl shadow-lg relative overflow-hidden">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Monto Total Cartera</p>
+                                        <h3 class="text-2xl font-bold text-white mt-1">$${totalPortfolio.toLocaleString()}</h3>
+                                    </div>
+                                    <div class="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 text-lg">
+                                        <i class="fa-solid fa-wallet"></i>
+                                    </div>
+                                </div>
+                                <div class="mt-3 text-xs text-slate-400 flex items-center gap-1">
+                                    Anticipos: <strong class="text-slate-300">$${totalAdvance.toLocaleString()}</strong>
+                                </div>
+                            </div>
+
+                            <div class="bg-slate-950/60 border border-slate-800 p-5 rounded-2xl shadow-lg relative overflow-hidden">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Cobros Listos</p>
+                                        <h3 class="text-2xl font-bold text-emerald-400 mt-1">${readyToCollectCount}</h3>
+                                    </div>
+                                    <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-lg">
+                                        <i class="fa-solid fa-circle-check"></i>
+                                    </div>
+                                </div>
+                                <div class="mt-3 text-xs text-emerald-400 font-medium">
+                                    Fecha cumplida (Semaforización Verde)
+                                </div>
+                            </div>
+
+                            <div class="bg-slate-950/60 border border-slate-800 p-5 rounded-2xl shadow-lg relative overflow-hidden">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Cobros Pendientes</p>
+                                        <h3 class="text-2xl font-bold text-rose-400 mt-1">${pendingCount}</h3>
+                                    </div>
+                                    <div class="w-12 h-12 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 text-lg">
+                                        <i class="fa-solid fa-clock"></i>
+                                    </div>
+                                </div>
+                                <div class="mt-3 text-xs text-rose-400 font-medium">
+                                    Aún no llega la fecha (Semaforización Roja)
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Role Specific Actions / Panels -->
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            
+                            <!-- If Leader (0444): Project Registration Form -->
+                            ${state.role === 'leader' ? `
+                                <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-6 shadow-xl lg:col-span-1 space-y-4">
+                                    <div class="flex items-center gap-3 border-b border-slate-800 pb-4">
+                                        <div class="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 font-bold">
+                                            <i class="fa-solid fa-file-circle-plus"></i>
+                                        </div>
+                                        <div>
+                                            <h2 class="font-bold text-white text-base">Registrar Nuevo Proyecto</h2>
+                                            <p class="text-xs text-slate-400">Panel exclusivo para Líder (0444)</p>
+                                        </div>
+                                    </div>
+
+                                    <form onsubmit="handleProjectSubmit(event)" class="space-y-4">
+                                        <div>
+                                            <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Nombre del Proyecto / Empresa</label>
+                                            <input type="text" id="form-company" value="${state.form.company}" oninput="updateForm('company', this.value)" placeholder="Ej. Soluciones Logísticas MX" required
+                                                class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20">
+                                        </div>
+
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Monto Total ($)</label>
+                                                <input type="number" step="0.01" id="form-total" value="${state.form.totalAmount}" oninput="updateForm('totalAmount', this.value)" placeholder="50000" required
+                                                    class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20">
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Anticipo ($)</label>
+                                                <input type="number" step="0.01" id="form-advance" value="${state.form.advanceAmount}" oninput="updateForm('advanceAmount', this.value)" placeholder="10000" required
+                                                    class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20">
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Fechas de Cobro Divididas (Máx. 5)</label>
+                                            <select id="form-numdates" onchange="changeNumDates(this.value)"
+                                                class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20">
+                                                <option value="1" ${state.form.numDates === '1' ? 'selected' : ''}>1 Fecha</option>
+                                                <option value="2" ${state.form.numDates === '2' ? 'selected' : ''}>2 Fechas</option>
+                                                <option value="3" ${state.form.numDates === '3' ? 'selected' : ''}>3 Fechas</option>
+                                                <option value="4" ${state.form.numDates === '4' ? 'selected' : ''}>4 Fechas</option>
+                                                <option value="5" ${state.form.numDates === '5' ? 'selected' : ''}>5 Fechas</option>
+                                            </select>
+                                        </div>
+
+                                        <!-- Dynamic Date Inputs -->
+                                        <div class="space-y-2 pt-1" id="dynamic-dates-container">
+                                            <p class="text-xs font-medium text-slate-400">Ingrese fecha y monto por cuota:</p>
+                                            ${state.form.dates.map((dateVal, idx) => `
+                                                <div class="flex items-center gap-2">
+                                                    <span class="text-xs font-mono text-cyan-400 w-6">#${idx+1}</span>
+                                                    <input type="date" value="${dateVal}" onchange="updateDateVal(${idx}, this.value)" required
+                                                        class="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500">
+                                                </div>
+                                            `).join('')}
+                                        </div>
+
+                                        <button type="submit" class="w-full py-3 px-4 rounded-xl font-semibold text-white bg-cyan-600 hover:bg-cyan-500 transition-all shadow-lg shadow-cyan-600/20 flex items-center justify-center gap-2 mt-2">
+                                            <i class="fa-solid fa-plus-circle"></i>
+                                            <span>Guardar en Base de Datos</span>
+                                        </button>
+                                    </form>
+                                </div>
+                            ` : ''}
+
+                            <!-- If Operator (0004): Database Download & Sync Panel -->
+                            ${state.role === 'operator' ? `
+                                <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-6 shadow-xl lg:col-span-1 space-y-4">
+                                    <div class="flex items-center gap-3 border-b border-slate-800 pb-4">
+                                        <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold">
+                                            <i class="fa-solid fa-database"></i>
+                                        </div>
+                                        <div>
+                                            <h2 class="font-bold text-white text-base">Módulo Operativo & DB</h2>
+                                            <p class="text-xs text-slate-400">Acceso Operativo (0004)</p>
+                                        </div>
+                                    </div>
+
+                                    <p class="text-sm text-slate-300">Como usuario operador, puede descargar la base de datos completa de proyectos, montos de anticipos y cuotas en formato CSV compatible con Excel.</p>
+                                    
+                                    <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+                                        <div class="flex items-center justify-between text-xs text-slate-400">
+                                            <span>Registros en DB:</span>
+                                            <span class="font-bold text-white font-mono">${state.projects.length} proyectos</span>
+                                        </div>
+                                        <div class="flex items-center justify-between text-xs text-slate-400">
+                                            <span>Sincronización:</span>
+                                            <span class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle text-[8px]"></i> Google Sheets / Cloud Sync</span>
+                                        </div>
+                                    </div>
+
+                                    <button onclick="downloadCSV()" class="w-full py-3.5 px-4 rounded-xl font-semibold text-white bg-emerald-600 hover:bg-emerald-500 transition-all shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2">
+                                        <i class="fa-solid fa-file-arrow-down"></i>
+                                        <span>Descargar Base de Datos (CSV / Excel)</span>
+                                    </button>
+                                </div>
+                            ` : ''}
+
+                            <!-- If Viewer (1111): Executive Summary Panel -->
+                            ${state.role === 'viewer' ? `
+                                <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-6 shadow-xl lg:col-span-1 space-y-4">
+                                    <div class="flex items-center gap-3 border-b border-slate-800 pb-4">
+                                        <div class="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 font-bold">
+                                            <i class="fa-solid fa-chart-pie"></i>
+                                        </div>
+                                        <div>
+                                            <h2 class="font-bold text-white text-base">Vista General Ejecutiva</h2>
+                                            <p class="text-xs text-slate-400">Monitoreo de Cobranza (1111)</p>
+                                        </div>
+                                    </div>
+                                    <p class="text-sm text-slate-300">Monitoreo en tiempo real del estado de semaforización. Verifique instantáneamente qué proyectos cuentan con fechas vencidas listas para la gestión de cobro.</p>
+                                    <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
+                                        <div class="flex justify-between text-xs text-slate-400">
+                                            <span>Eficacia de Cobro:</span>
+                                            <span class="text-white font-bold">100% Sincronizado</span>
+                                        </div>
+                                        <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                                            <div class="bg-cyan-500 h-full w-full"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ` : ''}
+
+                            <!-- Projects & Semaforization Table (Spans 2 cols if leader/operator/viewer) -->
+                            <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-6 shadow-xl ${state.role === 'leader' || state.role === 'operator' || state.role === 'viewer' ? 'lg:col-span-2' : 'lg:col-span-3'} space-y-4">
+                                
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                                    <div>
+                                        <h2 class="font-bold text-white text-base">Tabla de Proyectos y Semaforización Inteligente</h2>
+                                        <p class="text-xs text-slate-400">Estado de cobros comparado con la fecha del sistema (${today})</p>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <input type="text" placeholder="Buscar empresa..." oninput="handleSearch(this.value)" value="${state.searchQuery}"
+                                            class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500 w-48">
+                                    </div>
+                                </div>
+
+                                <!-- Projects Table -->
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-left text-xs text-slate-300">
+                                        <thead class="bg-slate-900/80 text-slate-400 uppercase font-semibold border-b border-slate-800">
+                                            <tr>
+                                                <th class="px-4 py-3">Empresa / Proyecto</th>
+                                                <th class="px-4 py-3">Monto Total</th>
+                                                <th class="px-4 py-3">Anticipo</th>
+                                                <th class="px-4 py-3">Fechas de Cobro & Cuotas</th>
+                                                <th class="px-4 py-3 text-right">Acciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-slate-800/60">
+                                            ${renderProjectsTable(today)}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                            </div>
+
+                        </div>
+                    </main>
+                </div>
+            `;
+        }
+
+        // --- Form Handlers ---
+        function updateForm(field, val) {
+            state.form[field] = val;
+        }
+
+        function changeNumDates(val) {
+            state.form.numDates = val;
+            const count = parseInt(val);
+            let newDates = [];
+            for (let i = 0; i < count; i++) {
+                newDates.push(state.form.dates[i] || '');
+            }
+            state.form.dates = newDates;
+            render();
+        }
+
+        function updateDateVal(index, val) {
+            state.form.dates[index] = val;
+        }
+
+        function handleProjectSubmit(e) {
+            e.preventDefault();
+            const { company, totalAmount, advanceAmount, dates } = state.form;
+            
+            if (!company || !totalAmount || dates.length === 0 || dates.some(d => !d)) {
+                showToast('Por favor complete todos los campos obligatorios y fechas.', 'error');
+                return;
+            }
+
+            const total = parseFloat(totalAmount);
+            const advance = parseFloat(advanceAmount) || 0;
+            const installmentAmount = (total - advance) / dates.length;
+
+            const newProject = {
+                id: 'proj-' + Date.now(),
+                company,
+                totalAmount: total,
+                advanceAmount: advance,
+                installments: dates.map(d => ({ date: d, amount: parseFloat(installmentAmount.toFixed(2)), paid: false })),
+                createdAt: new Date().toISOString().split('T')[0]
+            };
+
+            state.projects.unshift(newProject);
+            saveState();
+
+            // Reset form
+            state.form = { company: '', totalAmount: '', advanceAmount: '', numDates: '1', dates: [''] };
+            showToast('Proyecto registrado y semaforizado exitosamente', 'success');
+            render();
+        }
+
+        function handleSearch(query) {
+            state.searchQuery = query;
+            // Re-render table section or full app smoothly
+            render();
+        }
+
+        function deleteProject(id) {
+            if (state.role !== 'leader') {
+                showToast('Solo el rol Líder (0444) puede eliminar proyectos', 'error');
+                return;
+            }
+            state.projects = state.projects.filter(p => p.id !== id);
+            saveState();
+            showToast('Proyecto eliminado correctamente', 'info');
+            render();
+        }
+
+        // --- Render Projects Rows & Semaphore ---
+        function renderProjectsTable(today) {
+            let filtered = state.projects;
+            if (state.searchQuery.trim() !== '') {
+                const q = state.searchQuery.toLowerCase();
+                filtered = filtered.filter(p => p.company.toLowerCase().includes(q));
+            }
+
+            if (filtered.length === 0) {
+                return `
+                    <tr>
+                        <td colspan="5" class="px-4 py-8 text-center text-slate-500">
+                            No se encontraron proyectos registrados.
+                        </td>
+                    </tr>
+                `;
+            }
+
+            return filtered.map(p => `
+                <tr class="hover:bg-slate-900/40 transition-colors">
+                    <td class="px-4 py-4 font-medium text-white">
+                        <div class="flex items-center gap-2">
+                            <div class="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-cyan-400 font-bold text-xs">
+                                ${p.company.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                                <p class="text-white font-semibold">${p.company}</p>
+                                <p class="text-[10px] text-slate-400 font-mono">Creado: ${p.createdAt}</p>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-4 py-4 font-mono font-bold text-white">$${p.totalAmount.toLocaleString()}</td>
+                    <td class="px-4 py-4 font-mono text-slate-400">$${p.advanceAmount.toLocaleString()}</td>
+                    <td class="px-4 py-4">
+                        <div class="space-y-1.5">
+                            ${p.installments.map((inst, i) => {
+                                const isReady = inst.date <= today;
+                                return `
+                                    <div class="flex items-center gap-2 text-xs">
+                                        <span class="font-mono text-slate-400">#${i+1} (${inst.date}):</span>
+                                        <span class="font-mono text-white font-medium">$${inst.amount.toLocaleString()}</span>
+                                        ${isReady ? `
+                                            <span class="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-semibold text-[10px] flex items-center gap-1 shadow-sm">
+                                                <i class="fa-solid fa-circle text-[6px]"></i> Ya se puede cobrar
+                                            </span>
+                                        ` : `
+                                            <span class="px-2 py-0.5 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-400 font-semibold text-[10px] flex items-center gap-1 shadow-sm">
+                                                <i class="fa-solid fa-circle text-[6px]"></i> Aún no
+                                            </span>
+                                        `}
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </td>
+                    <td class="px-4 py-4 text-right">
+                        ${state.role === 'leader' ? `
+                            <button onclick="deleteProject('${p.id}')" class="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-all" title="Eliminar proyecto">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        ` : `
+                            <span class="text-slate-500 text-[10px]">Solo lectura</span>
+                        `}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // --- Download CSV / Excel Export Simulation ---
+        function downloadCSV() {
+            let csvContent = "data:text/csv;charset=utf-8,ID,Empresa,MontoTotal,Anticipo,FechaCuota,MontoCuota,EstadoCobro\n";
+            const today = new Date().toISOString().split('T')[0];
+
+            state.projects.forEach(p => {
+                p.installments.forEach((inst, idx) => {
+                    const status = inst.date <= today ? "Ya se puede cobrar" : "Aún no";
+                    csvContent += `"${p.id}","${p.company}",${p.totalAmount},${p.advanceAmount},"${inst.date}",${inst.amount},"${status}"\n`;
+                });
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `CXC_Seguras_Base_Datos_${today}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.unlink ? document.unlink(link) : link.remove();
+
+            showToast('Base de datos descargada con éxito en formato CSV (Compatible con Excel y Google Sheets)', 'success');
+        }
+
+        // Initial render on load
+        window.onload = function() {
+            render();
+        };
+    </script>
+</body>
+</html>
